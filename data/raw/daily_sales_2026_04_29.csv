@@ -1,0 +1,9 @@
+order_id,order_date,customer_id,customer_name,customer_email,customer_phone,store_id,store_name,store_city,product_id,product_name,category_id,category_name,supplier_id,supplier_name,quantity,unit_price,payment_method
+10005,2026-04-29,C005,Thet Htar,thet.htar@example.com,+959400000005,S001,City Mart Junction City,Yangon,P007,Chicken Eggs 10pcs,CAT06,Eggs,SUP06,Fresh Nest Farms,2,5200.00,Card
+10005,2026-04-29,C005,Thet Htar,thet.htar@example.com,+959400000005,S001,City Mart Junction City,Yangon,P008,Banana 1kg,CAT07,Fruits,SUP07,Myanmar Fresh Produce,1,2800.00,Card
+10006,2026-04-29,C006,Ma Thida,ma.thida@example.com,+959400000006,S002,City Mart Myanmar Plaza,Yangon,P001,Jasmine Rice 5kg,CAT01,Rice & Grains,SUP01,Golden Farm Co.,1,14500.00,Mobile Wallet
+10006,2026-04-29,C006,Ma Thida,ma.thida@example.com,+959400000006,S002,City Mart Myanmar Plaza,Yangon,P009,Laundry Detergent 2kg,CAT08,Household,SUP08,HomeCare Products,2,9200.00,Mobile Wallet
+10007,2026-04-29,C007,Kyaw Zin,kyaw.zin@example.com,+959400000007,S003,City Mart Mandalay Central,Mandalay,P010,Drinking Water 1L Pack,CAT03,Beverages,SUP09,Blue River Beverages,5,1200.00,Cash
+10008,2026-04-29,C001,Aye Aye,aye.aye@example.com,+959400000001,S004,City Mart Naypyitaw,Naypyitaw,P006,Fresh Milk 1L,CAT05,Dairy,SUP05,Green Valley Dairy,2,3900.00,Cash
+10008,2026-04-29,C001,Aye Aye,aye.aye@example.com,+959400000001,S004,City Mart Naypyitaw,Naypyitaw,P011,Butter 200g,CAT05,Dairy,SUP05,Green Valley Dairy,1,5600.00,Cash
+10009,2026-04-29,C008,Nandar,nandar@example.com,+959400000008,S005,City Mart Insein,Yangon,P012,Green Tea 500ml,CAT03,Beverages,SUP09,Blue River Beverages,6,1500.00,Card

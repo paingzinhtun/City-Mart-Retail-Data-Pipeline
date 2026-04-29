@@ -1,0 +1,7 @@
+order_id,order_date,customer_id,customer_name,customer_email,customer_phone,store_id,store_name,store_city,product_id,product_name,category_id,category_name,supplier_id,supplier_name,quantity,unit_price,payment_method
+10001,2026-04-28,C001,Aye Aye,aye.aye@example.com,+959400000001,S001,City Mart Junction City,Yangon,P001,Jasmine Rice 5kg,CAT01,Rice & Grains,SUP01,Golden Farm Co.,2,14500.00,Cash
+10001,2026-04-28,C001,Aye Aye,aye.aye@example.com,+959400000001,S001,City Mart Junction City,Yangon,P002,Sunflower Oil 1L,CAT02,Cooking Oil,SUP02,Healthy Oils Ltd.,1,7800.00,Cash
+10002,2026-04-28,C002,Ko Min,ko.min@example.com,+959400000002,S002,City Mart Myanmar Plaza,Yangon,P003,Instant Coffee 20 Sachets,CAT03,Beverages,SUP03,Morning Brew Foods,3,6500.00,Card
+10003,2026-04-28,C003,Su Mon,su.mon@example.com,+959400000003,S003,City Mart Mandalay Central,Mandalay,P004,Shampoo 650ml,CAT04,Personal Care,SUP04,CleanLife Myanmar,1,11900.00,Mobile Wallet
+10003,2026-04-28,C003,Su Mon,su.mon@example.com,+959400000003,S003,City Mart Mandalay Central,Mandalay,P005,Toothpaste 180g,CAT04,Personal Care,SUP04,CleanLife Myanmar,2,3200.00,Mobile Wallet
+10004,2026-04-28,C004,Hnin Wai,hnin.wai@example.com,+959400000004,S004,City Mart Naypyitaw,Naypyitaw,P006,Fresh Milk 1L,CAT05,Dairy,SUP05,Green Valley Dairy,4,3900.00,Cash

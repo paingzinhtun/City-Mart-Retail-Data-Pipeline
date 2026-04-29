@@ -1,0 +1,11 @@
+order_id,order_date,customer_id,customer_name,customer_email,customer_phone,store_id,store_name,store_city,product_id,product_name,category_id,category_name,supplier_id,supplier_name,quantity,unit_price,payment_method
+10015,2026-05-01,C013,Ei Ei,ei.ei@example.com,+959400000013,S001,City Mart Junction City,Yangon,P021,Apple 1kg,CAT07,Fruits,SUP07,Myanmar Fresh Produce,2,6200.00,Mobile Wallet
+10015,2026-05-01,C013,Ei Ei,ei.ei@example.com,+959400000013,S001,City Mart Junction City,Yangon,P022,Carrot 1kg,CAT11,Vegetables,SUP07,Myanmar Fresh Produce,1,3100.00,Mobile Wallet
+10016,2026-05-01,C014,Soe Moe,soe.moe@example.com,+959400000014,S002,City Mart Myanmar Plaza,Yangon,P023,Noodles 5 Pack,CAT01,Rice & Grains,SUP12,Quick Meal Foods,3,4200.00,Cash
+10016,2026-05-01,C014,Soe Moe,soe.moe@example.com,+959400000014,S002,City Mart Myanmar Plaza,Yangon,P002,Sunflower Oil 1L,CAT02,Cooking Oil,SUP02,Healthy Oils Ltd.,2,7800.00,Cash
+10017,2026-05-01,C003,Su Mon,su.mon@example.com,+959400000003,S003,City Mart Mandalay Central,Mandalay,P024,Body Lotion 400ml,CAT04,Personal Care,SUP04,CleanLife Myanmar,1,9800.00,Card
+10017,2026-05-01,C003,Su Mon,su.mon@example.com,+959400000003,S003,City Mart Mandalay Central,Mandalay,P005,Toothpaste 180g,CAT04,Personal Care,SUP04,CleanLife Myanmar,3,3200.00,Card
+10018,2026-05-01,C015,Win Naing,win.naing@example.com,+959400000015,S004,City Mart Naypyitaw,Naypyitaw,P025,Fish Sauce 700ml,CAT12,Condiments,SUP13,Traditional Taste Ltd.,2,3500.00,Cash
+10019,2026-05-01,C016,Hla Hla,hla.hla@example.com,+959400000016,S006,City Mart Taunggyi,Taunggyi,P026,Biscuits Family Pack,CAT10,Snacks,SUP11,Happy Snacks Co.,2,5900.00,Mobile Wallet
+10019,2026-05-01,C016,Hla Hla,hla.hla@example.com,+959400000016,S006,City Mart Taunggyi,Taunggyi,P010,Drinking Water 1L Pack,CAT03,Beverages,SUP09,Blue River Beverages,4,1200.00,Mobile Wallet
+10020,2026-05-01,C017,Myo Min,myo.min@example.com,+959400000017,S005,City Mart Insein,Yangon,P027,Dishwashing Liquid 750ml,CAT08,Household,SUP08,HomeCare Products,2,4300.00,Card

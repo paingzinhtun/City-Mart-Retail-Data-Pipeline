@@ -1,0 +1,10 @@
+order_id,order_date,customer_id,customer_name,customer_email,customer_phone,store_id,store_name,store_city,product_id,product_name,category_id,category_name,supplier_id,supplier_name,quantity,unit_price,payment_method
+10010,2026-04-30,C009,Phyu Phyu,phyu.phyu@example.com,+959400000009,S001,City Mart Junction City,Yangon,P013,Soap Bar 4pcs,CAT04,Personal Care,SUP04,CleanLife Myanmar,2,4800.00,Cash
+10010,2026-04-30,C009,Phyu Phyu,phyu.phyu@example.com,+959400000009,S001,City Mart Junction City,Yangon,P014,Face Tissue 3ply,CAT08,Household,SUP08,HomeCare Products,3,2500.00,Cash
+10011,2026-04-30,C010,Ye Lin,ye.lin@example.com,+959400000010,S002,City Mart Myanmar Plaza,Yangon,P015,Chicken Breast 1kg,CAT09,Meat & Seafood,SUP10,Prime Meat Supply,1,16800.00,Card
+10011,2026-04-30,C010,Ye Lin,ye.lin@example.com,+959400000010,S002,City Mart Myanmar Plaza,Yangon,P016,Frozen Prawns 500g,CAT09,Meat & Seafood,SUP10,Prime Meat Supply,1,18500.00,Card
+10012,2026-04-30,C002,Ko Min,ko.min@example.com,+959400000002,S003,City Mart Mandalay Central,Mandalay,P003,Instant Coffee 20 Sachets,CAT03,Beverages,SUP03,Morning Brew Foods,2,6500.00,Mobile Wallet
+10012,2026-04-30,C002,Ko Min,ko.min@example.com,+959400000002,S003,City Mart Mandalay Central,Mandalay,P017,Sugar 1kg,CAT01,Rice & Grains,SUP01,Golden Farm Co.,2,2900.00,Mobile Wallet
+10013,2026-04-30,C011,May Thu,may.thu@example.com,+959400000011,S005,City Mart Insein,Yangon,P018,Potato Chips 150g,CAT10,Snacks,SUP11,Happy Snacks Co.,4,2200.00,Cash
+10014,2026-04-30,C012,Zaw Zaw,zaw.zaw@example.com,+959400000012,S006,City Mart Taunggyi,Taunggyi,P019,Orange Juice 1L,CAT03,Beverages,SUP09,Blue River Beverages,2,4400.00,Card
+10014,2026-04-30,C012,Zaw Zaw,zaw.zaw@example.com,+959400000012,S006,City Mart Taunggyi,Taunggyi,P020,Yogurt Cup 4pcs,CAT05,Dairy,SUP05,Green Valley Dairy,2,3600.00,Card
