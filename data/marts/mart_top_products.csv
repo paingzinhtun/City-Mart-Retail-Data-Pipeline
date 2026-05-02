@@ -1,0 +1,28 @@
+product_rank,product_id,product_name,category,total_units_sold,total_revenue_ks,total_profit_ks,transaction_count
+1,P001,Jasmine Rice 5kg,Rice & Grains,3,43500.0,13050.0,2
+2,P003,Instant Coffee 20 Sachets,Beverages,5,32500.0,9750.0,2
+3,P006,Fresh Milk 1L,Dairy,6,23400.0,7020.0,2
+4,P002,Sunflower Oil 1L,Cooking Oil,3,23400.0,7020.0,2
+5,P016,Frozen Prawns 500g,Meat & Seafood,1,18500.0,5550.0,1
+6,P009,Laundry Detergent 2kg,Household,2,18400.0,5520.0,1
+7,P015,Chicken Breast 1kg,Meat & Seafood,1,16800.0,5040.0,1
+8,P005,Toothpaste 180g,Personal Care,5,16000.0,4800.0,2
+9,P023,Noodles 5 Pack,Rice & Grains,3,12600.0,3780.0,1
+10,P021,Apple 1kg,Fruits,2,12400.0,3720.0,1
+11,P004,Shampoo 650ml,Personal Care,1,11900.0,3570.0,1
+12,P026,Biscuits Family Pack,Snacks,2,11800.0,3540.0,1
+13,P010,Drinking Water 1L Pack,Beverages,9,10800.0,3240.0,2
+14,P007,Chicken Eggs 10pcs,Eggs,2,10400.0,3120.000000000001,1
+15,P024,Body Lotion 400ml,Personal Care,1,9800.0,2940.0,1
+16,P013,Soap Bar 4pcs,Personal Care,2,9600.0,2880.0,1
+17,P012,Green Tea 500ml,Beverages,6,9000.0,2700.0,1
+18,P018,Potato Chips 150g,Snacks,4,8800.0,2640.0,1
+19,P019,Orange Juice 1L,Beverages,2,8800.0,2640.0,1
+20,P027,Dishwashing Liquid 750ml,Household,2,8600.0,2580.0,1
+21,P014,Face Tissue 3ply,Household,3,7500.0,2250.0,1
+22,P020,Yogurt Cup 4pcs,Dairy,2,7200.0,2160.0,1
+23,P025,Fish Sauce 700ml,Condiments,2,7000.0,2100.0,1
+24,P017,Sugar 1kg,Rice & Grains,2,5800.0,1740.0000000000005,1
+25,P011,Butter 200g,Dairy,1,5600.0,1680.0000000000005,1
+26,P022,Carrot 1kg,Vegetables,1,3100.0,930.0,1
+27,P008,Banana 1kg,Fruits,1,2800.0,840.0000000000002,1

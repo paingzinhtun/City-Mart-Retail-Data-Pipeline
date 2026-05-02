@@ -1,155 +1,86 @@
-"""Warehouse layer for populating OLAP star schema tables."""
+"""Build warehouse star-schema CSV tables from staging data."""
 
-from pathlib import Path
+from __future__ import annotations
 
-from load import execute_sql_file, get_connection
-
-
-def create_olap_schema(sql_file_path: str | Path = "sql/olap_schema.sql") -> None:
-    """Create OLAP tables if they do not already exist.
-
-    Args:
-        sql_file_path: Path to the OLAP schema SQL file.
-    """
-    execute_sql_file(sql_file_path)
+import pandas as pd
 
 
-def populate_warehouse() -> None:
-    """Populate OLAP dimensions and fact table from OLTP tables."""
-    with get_connection() as conn:
-        with conn.cursor() as cursor:
-            _populate_dim_customer(cursor)
-            _populate_dim_store(cursor)
-            _populate_dim_product(cursor)
-            _populate_dim_date(cursor)
-            _populate_fact_sales(cursor)
+def build_dim_products(staging_products: pd.DataFrame) -> pd.DataFrame:
+    """Build the product dimension with a simple surrogate key."""
+    dim = staging_products[["product_id", "product_name", "category"]].copy()
+    dim = dim.sort_values("product_id").drop_duplicates("product_id").reset_index(drop=True)
+    dim.insert(0, "product_key", range(1, len(dim) + 1))
+    return dim
 
 
-def _populate_dim_customer(cursor) -> None:
-    """Upsert customer dimension records from OLTP customers."""
-    cursor.execute(
-        """
-        INSERT INTO dim_customer (customer_id, customer_name, email, phone)
-        SELECT customer_id, customer_name, email, phone
-        FROM customers
-        ON CONFLICT (customer_id) DO UPDATE SET
-            customer_name = EXCLUDED.customer_name,
-            email = EXCLUDED.email,
-            phone = EXCLUDED.phone;
-        """
-    )
+def build_dim_stores(staging_stores: pd.DataFrame) -> pd.DataFrame:
+    """Build the store dimension with a simple surrogate key."""
+    dim = staging_stores[["store_id", "store_name", "store_city"]].copy()
+    dim = dim.sort_values("store_id").drop_duplicates("store_id").reset_index(drop=True)
+    dim.insert(0, "store_key", range(1, len(dim) + 1))
+    return dim
 
 
-def _populate_dim_store(cursor) -> None:
-    """Upsert store dimension records from OLTP stores."""
-    cursor.execute(
-        """
-        INSERT INTO dim_store (store_id, store_name, city)
-        SELECT store_id, store_name, city
-        FROM stores
-        ON CONFLICT (store_id) DO UPDATE SET
-            store_name = EXCLUDED.store_name,
-            city = EXCLUDED.city;
-        """
-    )
+def build_dim_dates(staging_sales: pd.DataFrame) -> pd.DataFrame:
+    """Build a date dimension from distinct sale dates."""
+    dates = pd.to_datetime(staging_sales["sale_date"]).drop_duplicates().sort_values()
+    dim = pd.DataFrame({"full_date": dates})
+    dim["date_key"] = dim["full_date"].dt.strftime("%Y%m%d").astype(int)
+    dim["day"] = dim["full_date"].dt.day
+    dim["month"] = dim["full_date"].dt.month
+    dim["month_name"] = dim["full_date"].dt.month_name()
+    dim["quarter"] = dim["full_date"].dt.quarter
+    dim["year"] = dim["full_date"].dt.year
+    dim["day_of_week"] = dim["full_date"].dt.day_name()
+    return dim[
+        ["date_key", "full_date", "day", "month", "month_name", "quarter", "year", "day_of_week"]
+    ].reset_index(drop=True)
 
 
-def _populate_dim_product(cursor) -> None:
-    """Upsert denormalized product dimension records from OLTP product tables."""
-    cursor.execute(
-        """
-        INSERT INTO dim_product (product_id, product_name, category_name, supplier_name)
-        SELECT
-            p.product_id,
-            p.product_name,
-            c.category_name,
-            s.supplier_name
-        FROM products p
-        JOIN categories c ON p.category_id = c.category_id
-        JOIN suppliers s ON p.supplier_id = s.supplier_id
-        ON CONFLICT (product_id) DO UPDATE SET
-            product_name = EXCLUDED.product_name,
-            category_name = EXCLUDED.category_name,
-            supplier_name = EXCLUDED.supplier_name;
-        """
-    )
+def build_fact_sales(
+    staging_sales: pd.DataFrame,
+    dim_products: pd.DataFrame,
+    dim_stores: pd.DataFrame,
+    dim_dates: pd.DataFrame,
+) -> pd.DataFrame:
+    """Build fact sales by joining staging sales to dimensions."""
+    fact = staging_sales.copy()
+    fact["sale_date_key"] = pd.to_datetime(fact["sale_date"]).dt.strftime("%Y%m%d").astype(int)
+
+    fact = fact.merge(dim_products[["product_key", "product_id"]], on="product_id", how="left")
+    fact = fact.merge(dim_stores[["store_key", "store_id"]], on="store_id", how="left")
+    fact = fact.merge(dim_dates[["date_key"]], left_on="sale_date_key", right_on="date_key", how="left")
+
+    return fact[
+        [
+            "sale_id",
+            "date_key",
+            "product_key",
+            "store_key",
+            "units_sold",
+            "unit_sale_price_ks",
+            "unit_cost_ks",
+            "revenue_ks",
+            "profit_ks",
+            "payment_method",
+        ]
+    ].sort_values(["date_key", "sale_id"]).reset_index(drop=True)
 
 
-def _populate_dim_date(cursor) -> None:
-    """Upsert date dimension records for every order date in OLTP orders."""
-    cursor.execute(
-        """
-        INSERT INTO dim_date (
-            date_key,
-            full_date,
-            day,
-            month,
-            month_name,
-            quarter,
-            year,
-            day_of_week
-        )
-        SELECT DISTINCT
-            TO_CHAR(order_date, 'YYYYMMDD')::INTEGER AS date_key,
-            order_date AS full_date,
-            EXTRACT(DAY FROM order_date)::INTEGER AS day,
-            EXTRACT(MONTH FROM order_date)::INTEGER AS month,
-            TO_CHAR(order_date, 'Month') AS month_name,
-            EXTRACT(QUARTER FROM order_date)::INTEGER AS quarter,
-            EXTRACT(YEAR FROM order_date)::INTEGER AS year,
-            TO_CHAR(order_date, 'Day') AS day_of_week
-        FROM orders
-        ON CONFLICT (date_key) DO UPDATE SET
-            full_date = EXCLUDED.full_date,
-            day = EXCLUDED.day,
-            month = EXCLUDED.month,
-            month_name = EXCLUDED.month_name,
-            quarter = EXCLUDED.quarter,
-            year = EXCLUDED.year,
-            day_of_week = EXCLUDED.day_of_week;
-        """
-    )
+def build_warehouse_tables(
+    staging_products: pd.DataFrame,
+    staging_stores: pd.DataFrame,
+    staging_sales: pd.DataFrame,
+) -> dict[str, pd.DataFrame]:
+    """Build all warehouse tables used by the project."""
+    dim_products = build_dim_products(staging_products)
+    dim_stores = build_dim_stores(staging_stores)
+    dim_dates = build_dim_dates(staging_sales)
+    fact_sales = build_fact_sales(staging_sales, dim_products, dim_stores, dim_dates)
 
-
-def _populate_fact_sales(cursor) -> None:
-    """Upsert sales facts by joining OLTP transactions to OLAP dimensions."""
-    cursor.execute(
-        """
-        INSERT INTO fact_sales (
-            order_id,
-            product_key,
-            customer_key,
-            store_key,
-            date_key,
-            quantity,
-            unit_price,
-            line_total,
-            payment_method
-        )
-        SELECT
-            o.order_id,
-            dp.product_key,
-            dc.customer_key,
-            ds.store_key,
-            dd.date_key,
-            oi.quantity,
-            oi.unit_price,
-            oi.line_total,
-            o.payment_method
-        FROM orders o
-        JOIN order_items oi ON o.order_id = oi.order_id
-        JOIN dim_customer dc ON o.customer_id = dc.customer_id
-        JOIN dim_store ds ON o.store_id = ds.store_id
-        JOIN dim_product dp ON oi.product_id = dp.product_id
-        JOIN dim_date dd ON o.order_date = dd.full_date
-        ON CONFLICT (order_id, product_key) DO UPDATE SET
-            customer_key = EXCLUDED.customer_key,
-            store_key = EXCLUDED.store_key,
-            date_key = EXCLUDED.date_key,
-            quantity = EXCLUDED.quantity,
-            unit_price = EXCLUDED.unit_price,
-            line_total = EXCLUDED.line_total,
-            payment_method = EXCLUDED.payment_method,
-            loaded_at = CURRENT_TIMESTAMP;
-        """
-    )
+    return {
+        "dim_products": dim_products,
+        "dim_stores": dim_stores,
+        "dim_dates": dim_dates,
+        "fact_sales": fact_sales,
+    }

@@ -1,182 +1,279 @@
-"""Load layer for inserting transformed sales data into OLTP tables."""
+"""PostgreSQL loading helpers for staging, warehouse, and mart tables."""
+
+from __future__ import annotations
 
 from pathlib import Path
 from typing import Iterable
 
 import pandas as pd
 import psycopg2
+from psycopg2.extensions import connection as PgConnection
 from psycopg2.extras import execute_values
 
-from config.db_config import DB_CONFIG
+from config.db_config import DB_CONFIG, validate_db_config
 
 
-def get_connection():
-    """Create and return a PostgreSQL connection using project configuration."""
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+
+def get_connection() -> PgConnection:
+    """Create a PostgreSQL connection from environment-backed config."""
+    validate_db_config()
     return psycopg2.connect(**DB_CONFIG)
 
 
-def execute_sql_file(sql_file_path: str | Path) -> None:
-    """Execute every SQL statement from a schema file.
-
-    Args:
-        sql_file_path: Path to a SQL file.
-    """
-    sql_path = Path(sql_file_path)
-    with get_connection() as conn:
-        with conn.cursor() as cursor:
-            cursor.execute(sql_path.read_text(encoding="utf-8"))
+def execute_sql_file(cursor, sql_file_path: str | Path) -> None:
+    """Execute a SQL file using an existing transaction cursor."""
+    path = PROJECT_ROOT / sql_file_path if not Path(sql_file_path).is_absolute() else Path(sql_file_path)
+    cursor.execute(path.read_text(encoding="utf-8"))
 
 
-def _unique_records(
-    df: pd.DataFrame,
-    columns: list[str],
-    conflict_columns: list[str] | None = None,
-) -> list[tuple]:
-    """Return unique tuples for a set of columns using conflict keys when provided."""
-    subset = conflict_columns or columns
-    unique_df = df[columns].drop_duplicates(subset=subset, keep="last")
-    return list(unique_df.itertuples(index=False, name=None))
+def load_pipeline_outputs(
+    staging_tables: dict[str, pd.DataFrame],
+    warehouse_tables: dict[str, pd.DataFrame],
+    mart_tables: dict[str, pd.DataFrame],
+    reset_postgres: bool = False,
+) -> None:
+    """Load all project outputs into PostgreSQL in one transaction."""
+    conn = get_connection()
+    try:
+        with conn:
+            with conn.cursor() as cursor:
+                if reset_postgres:
+                    execute_sql_file(cursor, "sql/00_reset_schema.sql")
+                execute_sql_file(cursor, "sql/01_oltp_schema.sql")
+                execute_sql_file(cursor, "sql/02_warehouse_schema.sql")
+                execute_sql_file(cursor, "sql/03_marts.sql")
+
+                _load_products(cursor, staging_tables["staging_products"])
+                _load_stores(cursor, staging_tables["staging_stores"])
+                _load_sales(cursor, staging_tables["staging_sales"])
+
+                _load_dim_products(cursor, warehouse_tables["dim_products"])
+                _load_dim_stores(cursor, warehouse_tables["dim_stores"])
+                _load_dim_dates(cursor, warehouse_tables["dim_dates"])
+                _load_fact_sales(cursor, warehouse_tables["fact_sales"])
+
+                _load_mart_daily_revenue(cursor, mart_tables["mart_daily_revenue"])
+                _load_mart_top_products(cursor, mart_tables["mart_top_products"])
+                _load_mart_category_profit(cursor, mart_tables["mart_category_profit"])
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 
-def _upsert_records(query: str, records: Iterable[tuple]) -> None:
-    """Run a bulk UPSERT statement if records are available."""
-    records = list(records)
-    if not records:
-        return
-
-    with get_connection() as conn:
-        with conn.cursor() as cursor:
-            execute_values(cursor, query, records)
+def _records(df: pd.DataFrame, columns: list[str]) -> list[tuple]:
+    """Return tuples with pandas missing values converted to ``None``."""
+    return [
+        tuple(_to_python_value(value) for value in row)
+        for row in df[columns].itertuples(index=False, name=None)
+    ]
 
 
-def load_to_oltp(df: pd.DataFrame) -> None:
-    """Load transformed sales data into normalized OLTP tables.
-
-    Args:
-        df: Transformed sales DataFrame.
-    """
-    load_customers(df)
-    load_stores(df)
-    load_suppliers(df)
-    load_categories(df)
-    load_products(df)
-    load_orders(df)
-    load_order_items(df)
+def _to_python_value(value):
+    """Convert pandas and NumPy scalar values into psycopg2-friendly values."""
+    if pd.isna(value):
+        return None
+    if isinstance(value, pd.Timestamp):
+        return value.to_pydatetime()
+    if hasattr(value, "item"):
+        return value.item()
+    return value
 
 
-def load_customers(df: pd.DataFrame) -> None:
-    """Upsert customer records into the customers table."""
-    records = _unique_records(
-        df,
-        ["customer_id", "customer_name", "customer_email", "customer_phone"],
-        ["customer_id"],
-    )
+def _execute_values(cursor, query: str, records: Iterable[tuple]) -> None:
+    """Run a bulk insert/upsert when records are present."""
+    rows = list(records)
+    if rows:
+        execute_values(cursor, query, rows)
+
+
+def _load_products(cursor, df: pd.DataFrame) -> None:
     query = """
-        INSERT INTO customers (customer_id, customer_name, email, phone)
-        VALUES %s
-        ON CONFLICT (customer_id) DO UPDATE SET
-            customer_name = EXCLUDED.customer_name,
-            email = EXCLUDED.email,
-            phone = EXCLUDED.phone,
-            updated_at = CURRENT_TIMESTAMP;
-    """
-    _upsert_records(query, records)
-
-
-def load_stores(df: pd.DataFrame) -> None:
-    """Upsert store records into the stores table."""
-    records = _unique_records(df, ["store_id", "store_name", "store_city"], ["store_id"])
-    query = """
-        INSERT INTO stores (store_id, store_name, city)
-        VALUES %s
-        ON CONFLICT (store_id) DO UPDATE SET
-            store_name = EXCLUDED.store_name,
-            city = EXCLUDED.city,
-            updated_at = CURRENT_TIMESTAMP;
-    """
-    _upsert_records(query, records)
-
-
-def load_suppliers(df: pd.DataFrame) -> None:
-    """Upsert supplier records into the suppliers table."""
-    records = _unique_records(df, ["supplier_id", "supplier_name"], ["supplier_id"])
-    query = """
-        INSERT INTO suppliers (supplier_id, supplier_name)
-        VALUES %s
-        ON CONFLICT (supplier_id) DO UPDATE SET
-            supplier_name = EXCLUDED.supplier_name,
-            updated_at = CURRENT_TIMESTAMP;
-    """
-    _upsert_records(query, records)
-
-
-def load_categories(df: pd.DataFrame) -> None:
-    """Upsert category records into the categories table."""
-    records = _unique_records(df, ["category_id", "category_name"], ["category_id"])
-    query = """
-        INSERT INTO categories (category_id, category_name)
-        VALUES %s
-        ON CONFLICT (category_id) DO UPDATE SET
-            category_name = EXCLUDED.category_name,
-            updated_at = CURRENT_TIMESTAMP;
-    """
-    _upsert_records(query, records)
-
-
-def load_products(df: pd.DataFrame) -> None:
-    """Upsert product records into the products table."""
-    records = _unique_records(
-        df,
-        ["product_id", "product_name", "category_id", "supplier_id", "unit_price"],
-        ["product_id"],
-    )
-    query = """
-        INSERT INTO products (product_id, product_name, category_id, supplier_id, unit_price)
+        INSERT INTO products (product_id, product_name, category, unit_sale_price_ks, unit_cost_ks)
         VALUES %s
         ON CONFLICT (product_id) DO UPDATE SET
             product_name = EXCLUDED.product_name,
-            category_id = EXCLUDED.category_id,
-            supplier_id = EXCLUDED.supplier_id,
-            unit_price = EXCLUDED.unit_price,
+            category = EXCLUDED.category,
+            unit_sale_price_ks = EXCLUDED.unit_sale_price_ks,
+            unit_cost_ks = EXCLUDED.unit_cost_ks,
             updated_at = CURRENT_TIMESTAMP;
     """
-    _upsert_records(query, records)
+    _execute_values(cursor, query, _records(df, ["product_id", "product_name", "category", "unit_sale_price_ks", "unit_cost_ks"]))
 
 
-def load_orders(df: pd.DataFrame) -> None:
-    """Upsert order header records into the orders table."""
-    records = _unique_records(
-        df,
-        ["order_id", "order_date", "customer_id", "store_id", "payment_method"],
-        ["order_id"],
-    )
+def _load_stores(cursor, df: pd.DataFrame) -> None:
     query = """
-        INSERT INTO orders (order_id, order_date, customer_id, store_id, payment_method)
+        INSERT INTO stores (store_id, store_name, store_city)
         VALUES %s
-        ON CONFLICT (order_id) DO UPDATE SET
-            order_date = EXCLUDED.order_date,
-            customer_id = EXCLUDED.customer_id,
+        ON CONFLICT (store_id) DO UPDATE SET
+            store_name = EXCLUDED.store_name,
+            store_city = EXCLUDED.store_city,
+            updated_at = CURRENT_TIMESTAMP;
+    """
+    _execute_values(cursor, query, _records(df, ["store_id", "store_name", "store_city"]))
+
+
+def _load_sales(cursor, df: pd.DataFrame) -> None:
+    query = """
+        INSERT INTO sales (
+            sale_id, sale_date, store_id, product_id, units_sold,
+            unit_sale_price_ks, unit_cost_ks, revenue_ks, profit_ks, payment_method
+        )
+        VALUES %s
+        ON CONFLICT (sale_id) DO UPDATE SET
+            sale_date = EXCLUDED.sale_date,
             store_id = EXCLUDED.store_id,
+            product_id = EXCLUDED.product_id,
+            units_sold = EXCLUDED.units_sold,
+            unit_sale_price_ks = EXCLUDED.unit_sale_price_ks,
+            unit_cost_ks = EXCLUDED.unit_cost_ks,
+            revenue_ks = EXCLUDED.revenue_ks,
+            profit_ks = EXCLUDED.profit_ks,
             payment_method = EXCLUDED.payment_method,
             updated_at = CURRENT_TIMESTAMP;
     """
-    _upsert_records(query, records)
+    _execute_values(cursor, query, _records(df, [
+        "sale_id",
+        "sale_date",
+        "store_id",
+        "product_id",
+        "units_sold",
+        "unit_sale_price_ks",
+        "unit_cost_ks",
+        "revenue_ks",
+        "profit_ks",
+        "payment_method",
+    ]))
 
 
-def load_order_items(df: pd.DataFrame) -> None:
-    """Upsert order line records into the order_items table."""
-    records = _unique_records(
-        df,
-        ["order_id", "product_id", "quantity", "unit_price", "line_total"],
-        ["order_id", "product_id"],
-    )
+def _load_dim_products(cursor, df: pd.DataFrame) -> None:
     query = """
-        INSERT INTO order_items (order_id, product_id, quantity, unit_price, line_total)
+        INSERT INTO dim_products (product_key, product_id, product_name, category)
         VALUES %s
-        ON CONFLICT (order_id, product_id) DO UPDATE SET
-            quantity = EXCLUDED.quantity,
-            unit_price = EXCLUDED.unit_price,
-            line_total = EXCLUDED.line_total,
+        ON CONFLICT (product_id) DO UPDATE SET
+            product_key = EXCLUDED.product_key,
+            product_name = EXCLUDED.product_name,
+            category = EXCLUDED.category;
+    """
+    _execute_values(cursor, query, _records(df, ["product_key", "product_id", "product_name", "category"]))
+
+
+def _load_dim_stores(cursor, df: pd.DataFrame) -> None:
+    query = """
+        INSERT INTO dim_stores (store_key, store_id, store_name, store_city)
+        VALUES %s
+        ON CONFLICT (store_id) DO UPDATE SET
+            store_key = EXCLUDED.store_key,
+            store_name = EXCLUDED.store_name,
+            store_city = EXCLUDED.store_city;
+    """
+    _execute_values(cursor, query, _records(df, ["store_key", "store_id", "store_name", "store_city"]))
+
+
+def _load_dim_dates(cursor, df: pd.DataFrame) -> None:
+    query = """
+        INSERT INTO dim_dates (date_key, full_date, day, month, month_name, quarter, year, day_of_week)
+        VALUES %s
+        ON CONFLICT (date_key) DO UPDATE SET
+            full_date = EXCLUDED.full_date,
+            day = EXCLUDED.day,
+            month = EXCLUDED.month,
+            month_name = EXCLUDED.month_name,
+            quarter = EXCLUDED.quarter,
+            year = EXCLUDED.year,
+            day_of_week = EXCLUDED.day_of_week;
+    """
+    _execute_values(cursor, query, _records(df, ["date_key", "full_date", "day", "month", "month_name", "quarter", "year", "day_of_week"]))
+
+
+def _load_fact_sales(cursor, df: pd.DataFrame) -> None:
+    query = """
+        INSERT INTO fact_sales (
+            sale_id, date_key, product_key, store_key, units_sold,
+            unit_sale_price_ks, unit_cost_ks, revenue_ks, profit_ks, payment_method
+        )
+        VALUES %s
+        ON CONFLICT (sale_id) DO UPDATE SET
+            date_key = EXCLUDED.date_key,
+            product_key = EXCLUDED.product_key,
+            store_key = EXCLUDED.store_key,
+            units_sold = EXCLUDED.units_sold,
+            unit_sale_price_ks = EXCLUDED.unit_sale_price_ks,
+            unit_cost_ks = EXCLUDED.unit_cost_ks,
+            revenue_ks = EXCLUDED.revenue_ks,
+            profit_ks = EXCLUDED.profit_ks,
+            payment_method = EXCLUDED.payment_method,
             updated_at = CURRENT_TIMESTAMP;
     """
-    _upsert_records(query, records)
+    _execute_values(cursor, query, _records(df, [
+        "sale_id",
+        "date_key",
+        "product_key",
+        "store_key",
+        "units_sold",
+        "unit_sale_price_ks",
+        "unit_cost_ks",
+        "revenue_ks",
+        "profit_ks",
+        "payment_method",
+    ]))
+
+
+def _load_mart_daily_revenue(cursor, df: pd.DataFrame) -> None:
+    query = """
+        INSERT INTO mart_daily_revenue (
+            full_date, total_units_sold, total_revenue_ks, total_profit_ks, transaction_count
+        )
+        VALUES %s
+        ON CONFLICT (full_date) DO UPDATE SET
+            total_units_sold = EXCLUDED.total_units_sold,
+            total_revenue_ks = EXCLUDED.total_revenue_ks,
+            total_profit_ks = EXCLUDED.total_profit_ks,
+            transaction_count = EXCLUDED.transaction_count;
+    """
+    _execute_values(cursor, query, _records(df, ["full_date", "total_units_sold", "total_revenue_ks", "total_profit_ks", "transaction_count"]))
+
+
+def _load_mart_top_products(cursor, df: pd.DataFrame) -> None:
+    query = """
+        INSERT INTO mart_top_products (
+            product_rank, product_id, product_name, category, total_units_sold,
+            total_revenue_ks, total_profit_ks, transaction_count
+        )
+        VALUES %s
+        ON CONFLICT (product_id) DO UPDATE SET
+            product_rank = EXCLUDED.product_rank,
+            product_name = EXCLUDED.product_name,
+            category = EXCLUDED.category,
+            total_units_sold = EXCLUDED.total_units_sold,
+            total_revenue_ks = EXCLUDED.total_revenue_ks,
+            total_profit_ks = EXCLUDED.total_profit_ks,
+            transaction_count = EXCLUDED.transaction_count;
+    """
+    _execute_values(cursor, query, _records(df, [
+        "product_rank",
+        "product_id",
+        "product_name",
+        "category",
+        "total_units_sold",
+        "total_revenue_ks",
+        "total_profit_ks",
+        "transaction_count",
+    ]))
+
+
+def _load_mart_category_profit(cursor, df: pd.DataFrame) -> None:
+    query = """
+        INSERT INTO mart_category_profit (
+            category, total_units_sold, total_revenue_ks, total_profit_ks
+        )
+        VALUES %s
+        ON CONFLICT (category) DO UPDATE SET
+            total_units_sold = EXCLUDED.total_units_sold,
+            total_revenue_ks = EXCLUDED.total_revenue_ks,
+            total_profit_ks = EXCLUDED.total_profit_ks;
+    """
+    _execute_values(cursor, query, _records(df, ["category", "total_units_sold", "total_revenue_ks", "total_profit_ks"]))

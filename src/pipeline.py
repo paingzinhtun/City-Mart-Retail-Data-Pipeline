@@ -1,6 +1,9 @@
-"""Pipeline runner for City Mart Retail Data Pipeline."""
+"""Orchestrate the full City Mart CSV-to-marts learning pipeline."""
+
+from __future__ import annotations
 
 import argparse
+import logging
 import sys
 from pathlib import Path
 
@@ -8,66 +11,134 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from extract import extract_sales_csv
-from load import execute_sql_file, load_to_oltp
-from transform import save_processed_data, transform_sales_data
-from warehouse import create_olap_schema, populate_warehouse
+from extract import read_raw_sales_files
+from marts import build_mart_tables
+from transform import (
+    build_staging_products,
+    build_staging_sales,
+    build_staging_stores,
+    combine_raw_frames,
+    write_dataframe,
+)
+from validate import build_validation_report, write_validation_report
+from warehouse import build_warehouse_tables
 
 
-DEFAULT_RAW_FILE = Path("data/raw/daily_sales_2026_04_28.csv")
-DEFAULT_PROCESSED_DIR = Path("data/processed")
+RAW_DIR = PROJECT_ROOT / "data" / "raw"
+STAGING_DIR = PROJECT_ROOT / "data" / "staging"
+WAREHOUSE_DIR = PROJECT_ROOT / "data" / "warehouse"
+MARTS_DIR = PROJECT_ROOT / "data" / "marts"
 
 
-def run_pipeline(csv_file_path: str | Path) -> None:
-    """Run the full batch pipeline from raw CSV to OLAP warehouse.
-
-    Args:
-        csv_file_path: Path to a raw sales CSV file.
-    """
-    csv_path = Path(csv_file_path)
-    processed_path = DEFAULT_PROCESSED_DIR / f"{csv_path.stem}_processed.csv"
+def run_pipeline(
+    raw_dir: str | Path = RAW_DIR,
+    load_postgres: bool = False,
+    reset_postgres: bool = False,
+) -> None:
+    """Run extract, transform, validation, warehouse, mart, and optional DB load."""
+    logger = logging.getLogger(__name__)
+    raw_path = Path(raw_dir)
+    if reset_postgres and not load_postgres:
+        raise ValueError("--reset-postgres requires --load-postgres.")
 
     try:
-        print(f"Starting pipeline for: {csv_path}")
+        logger.info("Starting pipeline from raw directory: %s", raw_path)
+        raw_frames = read_raw_sales_files(raw_path)
+        raw_sales = combine_raw_frames(raw_frames)
+        logger.info("Extracted %s raw rows from %s file(s).", len(raw_sales), len(raw_frames))
 
-        print("Step 1/6: Extracting CSV data...")
-        raw_df = extract_sales_csv(csv_path)
-        print(f"Extracted {len(raw_df)} raw rows.")
+        staging_tables = {
+            "staging_products": build_staging_products(raw_sales),
+            "staging_stores": build_staging_stores(raw_sales),
+            "staging_sales": build_staging_sales(raw_sales),
+        }
+        _write_tables(staging_tables, STAGING_DIR)
+        logger.info("Wrote staging CSV outputs to %s.", STAGING_DIR)
 
-        print("Step 2/6: Transforming and validating data...")
-        transformed_df = transform_sales_data(raw_df)
-        save_processed_data(transformed_df, processed_path)
-        print(f"Transformed {len(transformed_df)} rows. Saved to {processed_path}.")
+        validation_report = build_validation_report(
+            raw_frames,
+            staging_tables["staging_products"],
+            staging_tables["staging_stores"],
+            staging_tables["staging_sales"],
+        )
+        write_validation_report(validation_report, MARTS_DIR / "validation_report.json")
+        if not validation_report["passed"]:
+            raise ValueError(f"Validation failed. See {MARTS_DIR / 'validation_report.json'}")
+        logger.info("Validation passed. Report written to data/marts/validation_report.json.")
 
-        print("Step 3/6: Creating OLTP schema...")
-        execute_sql_file("sql/oltp_schema.sql")
+        warehouse_tables = build_warehouse_tables(
+            staging_tables["staging_products"],
+            staging_tables["staging_stores"],
+            staging_tables["staging_sales"],
+        )
+        _write_tables(warehouse_tables, WAREHOUSE_DIR)
+        logger.info("Wrote warehouse CSV outputs to %s.", WAREHOUSE_DIR)
 
-        print("Step 4/6: Loading OLTP tables...")
-        load_to_oltp(transformed_df)
+        mart_tables = build_mart_tables(warehouse_tables)
+        _write_tables(mart_tables, MARTS_DIR)
+        logger.info("Wrote mart CSV outputs to %s.", MARTS_DIR)
 
-        print("Step 5/6: Creating OLAP schema...")
-        create_olap_schema("sql/olap_schema.sql")
+        if load_postgres:
+            if reset_postgres:
+                logger.warning("Resetting PostgreSQL project tables before load.")
+            logger.info("Loading staging, warehouse, and mart tables into PostgreSQL.")
+            from load import load_pipeline_outputs
 
-        print("Step 6/6: Populating warehouse star schema...")
-        populate_warehouse()
+            load_pipeline_outputs(
+                staging_tables,
+                warehouse_tables,
+                mart_tables,
+                reset_postgres=reset_postgres,
+            )
+            logger.info("PostgreSQL load completed.")
 
-        print("Pipeline completed successfully.")
-    except Exception as exc:
-        print(f"Pipeline failed: {exc}")
+        logger.info("Pipeline completed successfully.")
+    except Exception:
+        logger.exception("Pipeline failed.")
         raise
 
 
+def configure_logging() -> None:
+    """Configure readable command-line logging."""
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s | %(levelname)s | %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+
+
 def parse_args() -> argparse.Namespace:
-    """Parse command-line arguments for the pipeline runner."""
-    parser = argparse.ArgumentParser(description="Run the City Mart retail batch pipeline.")
+    """Parse pipeline command-line arguments."""
+    parser = argparse.ArgumentParser(description="Run the City Mart retail ETL pipeline.")
     parser.add_argument(
-        "--file",
-        default=str(DEFAULT_RAW_FILE),
-        help="Path to the raw daily sales CSV file.",
+        "--raw-dir",
+        default=str(RAW_DIR),
+        help="Directory containing raw daily sales CSV files.",
+    )
+    parser.add_argument(
+        "--load-postgres",
+        action="store_true",
+        help="Also create/load PostgreSQL tables using config from .env.",
+    )
+    parser.add_argument(
+        "--reset-postgres",
+        action="store_true",
+        help="Drop prior local project tables before PostgreSQL load. Use only in a practice database.",
     )
     return parser.parse_args()
 
 
+def _write_tables(tables: dict[str, object], output_dir: Path) -> None:
+    """Write named DataFrames as CSV files."""
+    for table_name, df in tables.items():
+        write_dataframe(df, output_dir / f"{table_name}.csv")
+
+
 if __name__ == "__main__":
+    configure_logging()
     args = parse_args()
-    run_pipeline(args.file)
+    run_pipeline(
+        raw_dir=args.raw_dir,
+        load_postgres=args.load_postgres,
+        reset_postgres=args.reset_postgres,
+    )

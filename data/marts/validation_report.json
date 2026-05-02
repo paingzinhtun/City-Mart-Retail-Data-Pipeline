@@ -1,0 +1,31 @@
+{
+  "raw_row_counts": {
+    "daily_sales_2026_04_28.csv": 6,
+    "daily_sales_2026_04_29.csv": 8,
+    "daily_sales_2026_04_30.csv": 9,
+    "daily_sales_2026_05_01.csv": 10
+  },
+  "staging_row_counts": {
+    "staging_products": 27,
+    "staging_stores": 6,
+    "staging_sales": 33
+  },
+  "duplicate_sale_id_count": 0,
+  "missing_value_counts_per_file": {
+    "daily_sales_2026_04_28.csv": {},
+    "daily_sales_2026_04_29.csv": {},
+    "daily_sales_2026_04_30.csv": {},
+    "daily_sales_2026_05_01.csv": {}
+  },
+  "staging_missing_value_counts": {
+    "staging_products": {},
+    "staging_stores": {},
+    "staging_sales": {}
+  },
+  "invalid_price_count": 0,
+  "invalid_unit_count": 0,
+  "unknown_product_id_count": 0,
+  "unknown_store_id_count": 0,
+  "errors": [],
+  "passed": true
+}
